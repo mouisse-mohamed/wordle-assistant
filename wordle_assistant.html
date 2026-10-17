@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wordle Assistant</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: #ffffff;
+    color: #1a1a1b;
+    margin: 0;
+    padding: 24px;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .app { width: 100%; max-width: 560px; }
+  h1 {
+    text-align: center;
+    font-size: 22px;
+    letter-spacing: 2px;
+    margin: 0 0 4px;
+  }
+  .status {
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+    min-height: 18px;
+    margin-bottom: 16px;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  .row label { font-size: 14px; color: #444; }
+  input.guess {
+    font-family: Consolas, monospace;
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 6px;
+    text-align: center;
+    text-transform: uppercase;
+    width: 140px;
+    padding: 6px 4px;
+    border: 2px solid #d3d6da;
+    border-radius: 4px;
+    outline: none;
+  }
+  input.guess:focus { border-color: #6aaa64; }
+  button {
+    cursor: pointer;
+    font-family: inherit;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  button.primary { background: #6aaa64; color: white; }
+  button.primary:hover { background: #5c9956; }
+  button.secondary { background: #e8eaed; color: #333; }
+  button.secondary:hover { background: #d8dade; }
+
+  .letters {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin: 20px 0 12px;
+  }
+  .letter-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .letter-char {
+    font-family: Consolas, monospace;
+    font-size: 26px;
+    font-weight: bold;
+    width: 44px;
+    height: 34px;
+    line-height: 34px;
+    text-align: center;
+    color: #1a1a1b;
+  }
+  .color-box {
+    width: 44px;
+    height: 34px;
+    border-radius: 4px;
+    border: 2px solid #d3d6da;
+    background: #d3d6da;
+    cursor: pointer;
+    transition: transform 0.08s, background 0.15s;
+  }
+  .color-box:hover { transform: scale(1.06); }
+  .color-box.yellow { background: #c9b458; border-color: #c9b458; }
+  .color-box.green  { background: #6aaa64; border-color: #6aaa64; }
+
+  .submit-row {
+    display: flex;
+    justify-content: center;
+    margin: 12px 0 20px;
+  }
+  .submit-row button { padding: 10px 24px; font-size: 15px; }
+
+  .suggest-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+  }
+  .suggest-header h2 { font-size: 15px; margin: 0; letter-spacing: 0.5px; }
+  .remaining { font-size: 13px; color: #666; }
+
+  .suggestions {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+  .suggestion {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 14px;
+    font-family: Consolas, monospace;
+    font-size: 16px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+  }
+  .suggestion:last-child { border-bottom: none; }
+  .suggestion:hover { background: #f6f7f8; }
+  .suggestion .word { font-weight: bold; letter-spacing: 2px; }
+  .suggestion .star { color: #c9b458; margin-right: 4px; font-size: 13px; }
+  .suggestion .score { font-size: 12px; color: #888; font-family: inherit; }
+  .suggestion.candidate { background: #fafffa; }
+
+  .footer {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 16px;
+  }
+  .empty-msg {
+    text-align: center;
+    padding: 20px;
+    color: #888;
+    font-size: 14px;
+  }
+  .toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a1b;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 15px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>WORDLE ASSISTANT</h1>
+  <div class="status" id="status">Loading dictionary...</div>
+
+  <div class="row">
+    <label for="guessInput">Your guess:</label>
+    <input type="text" id="guessInput" class="guess" maxlength="5" autocomplete="off" spellcheck="false">
+    <button class="primary" id="setBtn">Set</button>
+  </div>
+
+  <div class="letters" id="lettersRow"></div>
+
+  <div class="submit-row">
+    <button class="primary" id="submitBtn">Submit feedback</button>
+  </div>
+
+  <div class="suggest-header">
+    <h2>Best next guesses</h2>
+    <div class="remaining" id="remaining">—</div>
+  </div>
+  <div class="suggestions" id="suggestions">
+    <div class="empty-msg">Type a guess and click Set to begin.</div>
+  </div>
+
+  <div class="footer">
+    <button class="secondary" id="newGameBtn">New game</button>
+    <button class="secondary" id="copyBtn">Copy remaining</button>
+    <button class="secondary" id="downloadBtn">Download history</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// Dictionary (loaded from words.js)
+// ---------------------------------------------------------------------------
+let ALL_WORDS = [];
+let WORD_SET = new Set();
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const state = {
+  candidates: [],
+  guesses: [],
+  patterns: [],
+  currentGuess: "",
+  letterColors: ["", "", "", "", ""],
+  solved: false
+};
+
+// ---------------------------------------------------------------------------
+// Feedback computation
+// ---------------------------------------------------------------------------
+function feedback(guess, answer) {
+  const result = [".", ".", ".", ".", "."];
+  const answerChars = answer.split("");
+  for (let i = 0; i < 5; i++) {
+    if (guess[i] === answerChars[i]) {
+      result[i] = "g";
+      answerChars[i] = null;
+    }
+  }
+  for (let i = 0; i < 5; i++) {
+    if (result[i] === "g") continue;
+    const idx = answerChars.indexOf(guess[i]);
+    if (idx !== -1) {
+      result[i] = "y";
+      answerChars[idx] = null;
+    }
+  }
+  return result.join("");
+}
+
+function filterCandidates(candidates, guess, pattern) {
+  return candidates.filter(w => feedback(guess, w) === pattern);
+}
+
+// ---------------------------------------------------------------------------
+// Entropy scoring
+// ---------------------------------------------------------------------------
+function entropy(guess, candidates) {
+  if (candidates.length <= 2) return 0;
+  const counts = {};
+  for (const c of candidates) {
+    const p = feedback(guess, c);
+    counts[p] = (counts[p] || 0) + 1;
+  }
+  const total = candidates.length;
+  let score = 0;
+  for (const k in counts) {
+    const p = counts[k] / total;
+    score -= p * Math.log2(p);
+  }
+  return score;
+}
+
+function suggest(candidates, allWords, topN) {
+  if (!candidates.length) return [];
+  if (candidates.length <= 2) {
+    return candidates.map(w => ({ word: w, score: 1, isCandidate: true }));
+  }
+  const pool = candidates.length > 20 ? allWords : candidates;
+  const scored = pool.map(w => ({
+    word: w,
+    score: entropy(w, candidates),
+    isCandidate: candidates.includes(w)
+  }));
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (a.isCandidate !== b.isCandidate) return a.isCandidate ? -1 : 1;
+    return a.word.localeCompare(b.word);
+  });
+  return scored.slice(0, topN);
+}
+
+// ---------------------------------------------------------------------------
+// UI helpers
+// ---------------------------------------------------------------------------
+const $ = id => document.getElementById(id);
+
+function setStatus(msg) { $("status").textContent = msg; }
+
+function toast(msg, ms = 2200) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), ms);
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function renderLetters() {
+  const row = $("lettersRow");
+  row.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    const col = document.createElement("div");
+    col.className = "letter-col";
+
+    const ch = document.createElement("div");
+    ch.className = "letter-char";
+    ch.textContent = state.currentGuess ? state.currentGuess[i].toUpperCase() : "_";
+    col.appendChild(ch);
+
+    const box = document.createElement("div");
+    box.className = "color-box";
+    if (state.letterColors[i] === "y") box.classList.add("yellow");
+    if (state.letterColors[i] === "g") box.classList.add("green");
+    box.addEventListener("click", () => cycleColor(i));
+    col.appendChild(box);
+
+    row.appendChild(col);
+  }
+}
+
+function cycleColor(i) {
+  const cur = state.letterColors[i];
+  state.letterColors[i] = cur === "" ? "y" : cur === "y" ? "g" : "";
+  renderLetters();
+}
+
+function renderSuggestions() {
+  const box = $("suggestions");
+  const rem = $("remaining");
+
+  if (!ALL_WORDS.length) {
+    rem.textContent = "—";
+    box.innerHTML = `<div class="empty-msg">Waiting for dictionary...</div>`;
+    return;
+  }
+  if (state.candidates.length === 0) {
+    rem.textContent = "0 words";
+    box.innerHTML = `<div class="empty-msg">No words match your feedback. Did you click the colors right?</div>`;
+    return;
+  }
+
+  rem.textContent = `${state.candidates.length} word${state.candidates.length === 1 ? "" : "s"}`;
+
+  const top = suggest(state.candidates, ALL_WORDS, 10);
+  box.innerHTML = "";
+  for (const s of top) {
+    const div = document.createElement("div");
+    div.className = "suggestion" + (s.isCandidate ? " candidate" : "");
+    const left = document.createElement("div");
+    if (!s.isCandidate) {
+      const star = document.createElement("span");
+      star.className = "star";
+      star.textContent = "★";
+      left.appendChild(star);
+    }
+    const w = document.createElement("span");
+    w.className = "word";
+    w.textContent = s.word.toUpperCase();
+    left.appendChild(w);
+
+    const score = document.createElement("div");
+    score.className = "score";
+    score.textContent = s.score.toFixed(2);
+
+    div.appendChild(left);
+    div.appendChild(score);
+    div.addEventListener("click", () => {
+      $("guessInput").value = s.word;
+      confirmGuess();
+    });
+    box.appendChild(div);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+function confirmGuess() {
+  if (!ALL_WORDS.length) { setStatus("Dictionary still loading..."); return; }
+  const val = $("guessInput").value.trim().toLowerCase();
+  if (val.length !== 5 || !/^[a-z]+$/.test(val)) {
+    setStatus("Please enter a 5-letter word.");
+    return;
+  }
+  state.currentGuess = val;
+  state.letterColors = ["", "", "", "", ""];
+  renderLetters();
+  $("guessInput").value = val;
+  setStatus(`Now click the color you got for "${val.toUpperCase()}" on the NYT site.`);
+}
+
+function submitFeedback() {
+  if (!state.currentGuess) {
+    setStatus("Type a guess and click Set first.");
+    return;
+  }
+  const pattern = state.letterColors.map(c => c || ".").join("");
+  state.guesses.push(state.currentGuess);
+  state.patterns.push(pattern);
+
+  const before = state.candidates.length;
+  state.candidates = filterCandidates(state.candidates, state.currentGuess, pattern);
+
+  if (pattern === "ggggg") {
+    state.solved = true;
+    logGame(true);
+    toast(`Solved! "${state.currentGuess.toUpperCase()}" in ${state.guesses.length} guesses 🎉`, 3500);
+    setTimeout(newGame, 2000);
+    return;
+  }
+
+  if (state.guesses.length >= 6) {
+    logGame(false);
+    toast("Out of guesses — starting a new game.", 2800);
+    setTimeout(newGame, 2200);
+    return;
+  }
+
+  if (state.candidates.length === 0) {
+    setStatus(`No matches left (was ${before}). Check the colors you clicked.`);
+    renderSuggestions();
+    return;
+  }
+
+  setStatus(`Narrowed ${before} → ${state.candidates.length}. Pick your next guess.`);
+  state.currentGuess = "";
+  $("guessInput").value = "";
+  state.letterColors = ["", "", "", "", ""];
+  renderLetters();
+  renderSuggestions();
+  $("guessInput").focus();
+}
+
+function newGame() {
+  state.candidates = ALL_WORDS.slice();
+  state.guesses = [];
+  state.patterns = [];
+  state.currentGuess = "";
+  state.letterColors = ["", "", "", "", ""];
+  state.solved = false;
+  $("guessInput").value = "";
+  renderLetters();
+  renderSuggestions();
+  setStatus("New game. Enter your first guess.");
+  $("guessInput").focus();
+}
+
+function copyRemaining() {
+  if (!state.candidates.length) { toast("Nothing to copy."); return; }
+  const text = state.candidates.join("\n");
+  navigator.clipboard.writeText(text).then(
+    () => toast(`Copied ${state.candidates.length} words`),
+    () => toast("Copy failed — check browser permissions")
+  );
+}
+
+// ---------------------------------------------------------------------------
+// History
+// ---------------------------------------------------------------------------
+function logGame(solved) {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    solved,
+    guesses: state.guesses.slice(),
+    patterns: state.patterns.slice(),
+    remaining: state.candidates.length
+  };
+  try {
+    const existing = JSON.parse(localStorage.getItem("wordle_history") || "[]");
+    existing.push(entry);
+    localStorage.setItem("wordle_history", JSON.stringify(existing));
+  } catch (e) {
+    console.warn("localStorage failed:", e);
+  }
+}
+
+function downloadHistory() {
+  let entries;
+  try {
+    entries = JSON.parse(localStorage.getItem("wordle_history") || "[]");
+  } catch (e) {
+    entries = [];
+  }
+  if (!entries.length) { toast("No games recorded yet."); return; }
+
+  let out = "";
+  for (const g of entries) {
+    const when = g.timestamp.replace("T", " ").slice(0, 19);
+    const res = g.solved ? "SOLVED" : "FAILED";
+    out += `[${when}] ${res} in ${g.guesses.length} guesses\n`;
+    for (let i = 0; i < g.guesses.length; i++) {
+      const pretty = g.patterns[i]
+        .replace(/g/g, "🟩").replace(/y/g, "🟨").replace(/\./g, "⬛");
+      out += `    ${g.guesses[i].toUpperCase()}  ${pretty}\n`;
+    }
+    out += "\n";
+  }
+
+  const blob = new Blob([out], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "wordle_history.txt";
+  a.click();
+  URL.revokeObjectURL(url);
+  toast("History downloaded");
+}
+
+// ---------------------------------------------------------------------------
+// Wire it up
+// ---------------------------------------------------------------------------
+$("setBtn").addEventListener("click", confirmGuess);
+$("submitBtn").addEventListener("click", submitFeedback);
+$("newGameBtn").addEventListener("click", newGame);
+$("copyBtn").addEventListener("click", copyRemaining);
+$("downloadBtn").addEventListener("click", downloadHistory);
+$("guessInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") confirmGuess();
+});
+
+renderLetters();
+</script>
+
+<!-- Full dictionary -->
+<script src="words.js"></script>
+<script>
+  if (window.WORDLE_WORDS && window.WORDLE_WORDS.length > 0) {
+    ALL_WORDS = window.WORDLE_WORDS.slice();
+    WORD_SET = new Set(ALL_WORDS);
+    state.candidates = ALL_WORDS.slice();
+    renderSuggestions();
+    setStatus("Dictionary loaded: " + ALL_WORDS.length + " words. Enter your first guess.");
+  } else {
+    setStatus("Dictionary failed to load. Check that words.js is in the same folder.");
+  }
+</script>
+</body>
+</html>
